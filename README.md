@@ -27,6 +27,18 @@ This repository contains the custom code required to enable **Screen + Camera** 
 
 To use this in a Qualtrics survey, you will need to copy the contents of these files into the specific "Question" areas within the Qualtrics Survey Builder.
 
+**Note:** The CSS and JavaScript files (`custom-css.css` and `custom-secure.js`) are hosted via [jsDelivr CDN](https://www.jsdelivr.com/) to avoid browser ORB (Opaque Response Blocking) issues. The HTML file references these files using jsDelivr URLs. If you fork this repository, update the URLs in `question.html` to point to your repository:
+
+```html
+<!-- CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/YOUR_USERNAME/pipe-screen-sharing@master/public/custom-css.css" />
+
+<!-- JavaScript -->
+<script type="text/javascript" src="https://cdn.jsdelivr.net/gh/YOUR_USERNAME/pipe-screen-sharing@master/public/custom-secure.js"></script>
+```
+
+**Why jsDelivr?** GitHub's raw URLs serve files with incorrect MIME types (`text/plain` instead of `text/css` or `application/javascript`), which causes browsers to block them due to ORB security policies. jsDelivr properly serves files with correct MIME types and CORS headers.
+
 ### 1. Create Question
 
 Create a **Text/Graphic** question (or a standard Text Entry question if you prefer to hide the input box manually).
@@ -98,7 +110,7 @@ var pipeParams = {
 
 ```
 
-The system uses `navigator.userAgent` in `custom-secure.js` to detect mobile devices.
+The system uses `navigator.userAgent` in `question.js` (via the `checkDeviceAndBlock()` function) to detect mobile devices.
 
 * **Behavior:** Hides the "Grant Access" button and displays a "Desktop Computer Required" error message.
 * **Reason:** The `getDisplayMedia` API (required for screen sharing) is not supported on mobile browsers.
