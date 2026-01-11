@@ -380,3 +380,14 @@ color: #12988A;
 }
 
 /* Camera container is now visible for screen+camera recording */
+
+/* Reposition "Add Camera" rectangle - move it up */
+[id^="pipeStartCamRectangle-"] {
+    transform: translate(0px, -200px) !important;
+}
+
+/* Make camera overlay bigger and move it up slightly */
+[id^="pipePipVideoContainer-"] {
+    width: max(120px, 20%) !important; /* Slightly bigger: from 16.6667% to 20% */
+    bottom: 70px !important; /* Move up: from 20px to 70px (moved up 50px) */
+}
