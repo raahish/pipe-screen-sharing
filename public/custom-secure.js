@@ -393,38 +393,6 @@ function handleAPiCallForDeviceError(IpAddress, errorMessage) {
 
 
 /**
- * Detects mobile operating system and BLOCKS usage if true.
- * Returns true if mobile/tablet, false if desktop.
- */
-function checkDeviceAndBlock() {
-  var userAgent = navigator.userAgent || navigator.vendor || window.opera;
-  var isMobile = false;
-
-  // Basic mobile checks
-  if (/windows phone/i.test(userAgent) || /android/i.test(userAgent) || /iPad|iPhone|iPod/.test(userAgent)) {
-    isMobile = true;
-  }
-  
-  // If it is mobile, manipulate the DOM immediately to block entry
-  if (isMobile) {
-      console.log("Mobile device detected. Blocking screen recording.");
-      // Hide the grant button
-      jQuery("#grant-btn").hide();
-      
-      // Update the permission modal text to show error
-      jQuery("#perm-title").text("Desktop Computer Required");
-      jQuery("#perm-desc").html("Screen recording is not supported on mobile devices.<br><br><b>Please open this link on a desktop computer (Mac or Windows) to continue.</b>");
-      
-      // Hide the default Qualtrics Next button just in case
-      jQuery("#NextButton").hide();
-      jQuery("#NextButton-custom").hide();
-  }
-  
-  return isMobile;
-}
-
-
-/**
  * Validates the recorded video and updates the UI accordingly.
  * @param {object} recorderObject
  * @param {string} location
