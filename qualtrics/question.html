@@ -1,0 +1,39 @@
+<link rel="stylesheet" href="https://cdn.addpipe.com/2.0/pipe.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-modal/0.9.1/jquery.modal.min.css" />
+<link rel="stylesheet" href="https://d2kltgp8v5sml0.cloudfront.net/templates/qualtrics-addpipe-custom.css" />
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-modal/0.9.1/jquery.modal.min.js"></script>
+<script type="text/javascript" src="https://cdn.addpipe.com/2.0/pipe.js"></script>
+<script type="text/javascript"
+    src="https://d2kltgp8v5sml0.cloudfront.net/templates/static/qualtrics-addpipe-custom-secure.js"></script><br>
+<div id="VQ11"></div>
+<div id="permission" class="modal" data-backdrop="static" data-keyboard="false" style="display: none">
+    <div class="record-answer"><img src="https://d2kltgp8v5sml0.cloudfront.net/templates/svg/selfie.gif" /></div>
+    <div class="record-title" id="perm-title">Let's Record Your Answer.</div>
+    <div class="record-description" id="perm-desc">Please allow to your <span>camera &#128247</span>; and
+        <span>microphone &#127908</span>; so we can seethat beautiful face &#128525; .
+    </div>
+    <div><button class="record-button" id="grant-btn" onclick="getCamAccess()">Grant Access</button></div>
+</div>
+<div class="modal" id="recordInstruction">
+    <div class="image-rec"><img src="https://d2kltgp8v5sml0.cloudfront.net/templates/svg/Record.gif"></div>
+    <div class="record-title">How to Record!</div>
+    <div class="record-description">
+        <ol>
+            <li>Record a <span>video between 30 seconds and 2 minutes long</span></li>
+            <li>Click <span>Record Screen</span> and select your screen</li>
+            <li>Ensure we can <span>hear you</span> speak</li>
+        </ol>
+    </div>
+    <div class="textRight"><button onClick="modalClose()" class="next-button"><img
+                src="https://d2kltgp8v5sml0.cloudfront.net/templates/svg/next.svg"></button></div>
+</div>
+<div class="modal" id="error">
+    <div class="image-rec" id="image-sucess"></div>
+    <div class="record-title" id="record-title"></div>
+    <div class="record-description">
+        <ul id="result" class="feedback"></ul>
+    </div>
+</div>
+<div class="NextButton-Custom" id="NextButton-custom"><button class="next-button" onClick="nextQuestion()">Next Question
+        <img src="https://d2kltgp8v5sml0.cloudfront.net/templates/svg/next.svg"></button></div>
