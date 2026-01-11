@@ -391,3 +391,8 @@ color: #12988A;
     width: max(120px, 20%) !important; /* Slightly bigger: from 16.6667% to 20% */
     bottom: 70px !important; /* Move up: from 20px to 70px (moved up 50px) */
 }
+
+/* Hide "Record Video" option from initial screen - only show "Record Screen" */
+[id^="pipeStartRecording-"] {
+    display: none !important;
+}
