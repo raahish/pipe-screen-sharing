@@ -53,13 +53,9 @@ opacity: 0.4;
 width: 80px !important;
 height: auto;
 }
-.pipeMicContainer {
-display: none !important;
-}
-
-.pipeAudioMenuVisualizer{
-    display: none !important;
-}
+/* Mic and audio visualizer - keeping visible for full UI */
+/* .pipeMicContainer { display: none !important; } */
+/* .pipeAudioMenuVisualizer { display: none !important; } */
 
 @keyframes createBox {
 

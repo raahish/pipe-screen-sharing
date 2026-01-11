@@ -1,5 +1,5 @@
-var questionName = "VQ11"; 
-var videoURL = "VQ11_pipe_url"; 
+var questionName = "VQ1"; 
+var videoURL = "VQ1_pipe_url"; 
 var mimetype = 'audio/webm'; 
 var Q_CHL = "${e://Field/Q_CHL}"; 
 
@@ -10,7 +10,7 @@ var pipeParams = {
     eid: "KCfFkj", 
     mrt: 120, 
     avrec: 1, 
-    sis: 1, // Skip initial screen - camera visible by default, user can add screen recording
+    sis: 0, // Show initial screen with all recording options (camera, screen, etc.)
     srec: 1, // ENABLE SCREEN RECORDING
     mimetype: mimetype, 
     questionName: questionName, 

@@ -291,25 +291,11 @@ function getCamAccess() {
         jQuery.modal.close();
         jQuery('#recordInstruction').modal();
         loadPipe(questionName, pipeParams);
+        // Minimal styling - keeping most AddPipe UI visible for debugging
         var sheet = document.createElement('style');
         sheet.innerHTML =
-          '#pipeMenu-' +
-          questionName +
-          '{height:170px!important;background-color:#f6f3e6!important;display:flex;justify-content:center;align-items:center;width: 100% !important;}#pipeVrec-' +
-          questionName +
-          ',#' +
-          questionName +
-          '{height:auto!important}#pipeRec-' +
-          questionName +
-          '{text-align:center}#pipeClickPowered-' +
-          questionName +
-          '{display:none!important}#pipePlay-' +
-          questionName +
-          ' svg{fill:#F56A6A;border:7px solid #fff;border-radius:50%;padding:10px}#pipePlay-' +
-          questionName +
-          '{position:absolute;bottom:39px;display:none;right: 5%;}#pipeVideoInput-' +
-          questionName +
-          '{border-radius: 8px !important}.retake-button{border: 1px solid #fff; bottom: 68px; left: 43px; background: #12988A6E; width: 46px; height: 46px; border-radius: 50%; position: absolute;}.pipeTimer{display:none !important}';
+          '#pipeClickPowered-' + questionName + '{display:none!important}' +
+          '#pipeVideoInput-' + questionName + '{border-radius: 8px !important}';
         document.body.appendChild(sheet);
       })
       .catch((err) => {
@@ -329,25 +315,11 @@ function getCamAccess() {
     jQuery.modal.close();
     jQuery('#recordInstruction').modal();
     loadPipe(questionName, pipeParams);
+    // Minimal styling - keeping most AddPipe UI visible for debugging
     var sheet = document.createElement('style');
     sheet.innerHTML =
-      '#pipeMenu-' +
-      questionName +
-      '{height:170px!important;background-color:#f6f3e6!important;display:flex;justify-content:center;align-items:center;width: 100% !important;}#pipeVrec-' +
-      questionName +
-      ',#' +
-      questionName +
-      '{height:auto!important}#pipeRec-' +
-      questionName +
-      '{text-align:center}#pipeClickPowered-' +
-      questionName +
-      '{display:none!important}#pipePlay-' +
-      questionName +
-      ' svg{fill:#F56A6A;border:7px solid #fff;border-radius:50%;padding:10px}#pipePlay-' +
-      questionName +
-      '{position:absolute;bottom:39px;display:none;right: 5%;}#pipeVideoInput-' +
-      questionName +
-      '{border-radius: 8px !important}.retake-button{border: 1px solid #fff; bottom: 68px; left: 43px; background: #12988A6E; width: 46px; height: 46px; border-radius: 50%; position: absolute;}.pipeTimer{display:none !important}';
+      '#pipeClickPowered-' + questionName + '{display:none!important}' +
+      '#pipeVideoInput-' + questionName + '{border-radius: 8px !important}';
     document.body.appendChild(sheet);
   }
 }
