@@ -307,11 +307,7 @@ function getCamAccess() {
           questionName +
           ' svg{fill:#F56A6A;border:7px solid #fff;border-radius:50%;padding:10px}#pipePlay-' +
           questionName +
-          '{position:absolute;bottom:39px;display:none;right: 5%;}#pipeSwitchCam-' +
-          questionName +
-          '{display:none!important}#pipeSmallVideo-' +
-          questionName +
-          '{display:none!important}#pipeVideoInput-' +
+          '{position:absolute;bottom:39px;display:none;right: 5%;}#pipeVideoInput-' +
           questionName +
           '{border-radius: 8px !important}.retake-button{border: 1px solid #fff; bottom: 68px; left: 43px; background: #12988A6E; width: 46px; height: 46px; border-radius: 50%; position: absolute;}.pipeTimer{display:none !important}';
         document.body.appendChild(sheet);
@@ -349,11 +345,7 @@ function getCamAccess() {
       questionName +
       ' svg{fill:#F56A6A;border:7px solid #fff;border-radius:50%;padding:10px}#pipePlay-' +
       questionName +
-      '{position:absolute;bottom:39px;display:none;right: 5%;}#pipeSwitchCam-' +
-      questionName +
-      '{display:none!important}#pipeSmallVideo-' +
-      questionName +
-      '{display:none!important}#pipeVideoInput-' +
+      '{position:absolute;bottom:39px;display:none;right: 5%;}#pipeVideoInput-' +
       questionName +
       '{border-radius: 8px !important}.retake-button{border: 1px solid #fff; bottom: 68px; left: 43px; background: #12988A6E; width: 46px; height: 46px; border-radius: 50%; position: absolute;}.pipeTimer{display:none !important}';
     document.body.appendChild(sheet);

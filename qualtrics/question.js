@@ -10,7 +10,7 @@ var pipeParams = {
     eid: "KCfFkj", 
     mrt: 120, 
     avrec: 1, 
-    sis: 0, // Changed to 0 so user sees the "Record Screen" button
+    sis: 1, // Skip initial screen - camera visible by default, user can add screen recording
     srec: 1, // ENABLE SCREEN RECORDING
     mimetype: mimetype, 
     questionName: questionName, 
