@@ -5,13 +5,17 @@ var Q_CHL = "${e://Field/Q_CHL}";
 
 var pipeParams = { 
     size: { width: "100%", height: 510, }, 
-    qualityurl: "avq/480p.xml", 
+    qualityurl: "avq/360p.xml", // Lowered from 480p to reduce encoding work
     accountHash: "fb6878ab6bdc0a6bc55c2a6b3f695e05",
     eid: "KCfFkj", 
     mrt: 120, 
     avrec: 1, 
     sis: 0, // Show initial screen with all recording options (camera, screen, etc.)
     srec: 1, // ENABLE SCREEN RECORDING
+    // Lower frame rate for screen capture to reduce compositing work
+    gdmconstraints: "{video:{frameRate:{max:15}},audio:true}",
+    // Lower webcam to 360p @ 15fps to reduce compositing work
+    gumconstraints: "{video:{width:640,height:360,frameRate:15},audio:true}",
     mimetype: mimetype, 
     questionName: questionName, 
     payload: "${e://Field/ResponseID}", 
