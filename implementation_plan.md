@@ -12,7 +12,7 @@ This document outlines the implementation plan for recording screen and camera s
 ### Solution
 - Record screen and camera as **separate streams** on the client
 - Upload both to S3
-- Composite them **server-side** using AWS MediaConvert
+- Composite them **server-side** using one of several options (see Phase 2)
 - Output the final video to a predictable URL
 
 ### Architecture Diagram
@@ -59,30 +59,17 @@ This document outlines the implementation plan for recording screen and camera s
                               ┌─────────────────────────────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         AWS Lambda (Orchestrator)                        │
+│                    SERVER-SIDE COMPOSITING                               │
+│                    (Choose ONE of these options)                         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│   1. Triggered by S3 event (camera file uploaded)                       │
-│   2. Checks if screen file exists                                       │
-│   3. Creates MediaConvert job for compositing                           │
-│   4. (Optional) Updates status in DynamoDB                              │
+│   Option A: Remotion Lambda (React-based, runs on your AWS)             │
+│   Option B: Shotstack / Creatomate (JSON API, managed service)          │
+│   Option C: Editframe (HTML/CSS-based, managed service)                 │
+│   Option D: AWS MediaConvert (managed, expensive)                       │
+│   Option E: Self-hosted FFmpeg (cheapest, most setup)                   │
 │                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         AWS MediaConvert                                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   Input 1: {streamName}.mp4 (screen - full frame)                       │
-│   Input 2: {streamName}_camera.webm (camera - PiP overlay)              │
-│                                                                         │
-│   Processing:                                                           │
-│   - Screen as base layer (full frame)                                   │
-│   - Camera as overlay (bottom-right, 15% of frame width)                │
-│   - Audio from screen recording (includes mic)                          │
-│                                                                         │
-│   Output: {streamName}_composited.mp4                                   │
+│   All options output to: {streamName}_composited.mp4                    │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
                               │
@@ -100,13 +87,27 @@ This document outlines the implementation plan for recording screen and camera s
 
 ---
 
+## Server-Side Options Comparison
+
+| Option | Est. Cost (100K min/day) | Setup Effort | Pros | Cons |
+|--------|--------------------------|--------------|------|------|
+| **Remotion Lambda** | ~$500-2,000/mo | Medium | Runs on your AWS, React-based, very scalable | React learning curve, needs license |
+| **Shotstack** | ~$10-20K/mo | Low | Simple JSON API, managed | Per-render pricing |
+| **Creatomate** | ~$9-18K/mo | Low | Simple JSON API, good templates | Per-render pricing |
+| **Editframe** | Contact for pricing | Low | HTML/CSS-based, parallel rendering | Newer service |
+| **AWS MediaConvert** | ~$45,000/mo | Medium | Native AWS, reliable | Very expensive |
+| **Self-hosted FFmpeg** | ~$500-2,500/mo | High | Cheapest, full control | Must manage infrastructure |
+
+**Recommendation**: Start with **Remotion Lambda** (best value) or **Shotstack/Creatomate** (simplest API).
+
+---
+
 ## Prerequisites
 
-### AWS Services Required
+### Required for All Options
 - **S3**: Already configured (bucket: `com.knit.pipe-recorder-videos`)
-- **Lambda**: For orchestrating the compositing workflow
-- **MediaConvert**: For server-side video compositing
-- **IAM**: Roles for Lambda and MediaConvert to access S3
+- **Lambda**: For orchestrating the compositing workflow (triggers processing)
+- **IAM**: Roles for Lambda to access S3
 
 ### Existing Setup
 - AddPipe account with S3 push configured
@@ -123,6 +124,8 @@ This document outlines the implementation plan for recording screen and camera s
 ## Phase 1: Client-Side Camera Recording
 
 **Goal**: Record camera separately using MediaRecorder API while AddPipe records screen.
+
+> ⚠️ **This phase is the same regardless of which server-side option you choose.**
 
 ### Step 1.1: Disable AddPipe's Camera PiP
 
@@ -443,265 +446,467 @@ async function getPresignedUrl(filename) {
 
 ---
 
-## Phase 2: Server-Side Compositing with MediaConvert
+## Phase 2: Server-Side Compositing
 
 **Goal**: Automatically composite screen + camera when both files are in S3.
 
-### Step 2.1: Create MediaConvert IAM Role
+> 📋 **Choose ONE of the following options based on your needs.**
 
-Create an IAM role for MediaConvert with these permissions:
+---
 
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject"
-            ],
-            "Resource": [
-                "arn:aws:s3:::com.knit.pipe-recorder-videos/*"
-            ]
-        }
-    ]
-}
+### Option A: Remotion Lambda (Recommended for Cost)
+
+**Best for**: Maximum cost savings while maintaining quality and control.
+
+**Documentation**: [remotion.dev/docs/lambda](https://www.remotion.dev/docs/lambda)
+
+#### How It Works
+1. Write video composition in React
+2. Deploy Remotion to your AWS Lambda
+3. Trigger composition when both files are in S3
+4. Output composited video to S3
+
+#### Estimated Cost
+- ~$500-2,000/month at 100K minutes/day
+- Requires [Remotion license](https://remotion.pro/license) for commercial use
+
+#### Setup Steps
+
+**Step A.1: Install Remotion**
+
+```bash
+npm init video -- --template=lambda
+cd my-video
+npm i
 ```
 
-Trust relationship:
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {
-                "Service": "mediaconvert.amazonaws.com"
-            },
-            "Action": "sts:AssumeRole"
-        }
-    ]
+**Step A.2: Create Composition Component**
+
+```tsx
+// src/PipComposition.tsx
+import { AbsoluteFill, Video, useVideoConfig } from 'remotion';
+
+interface PipProps {
+  screenVideoUrl: string;
+  cameraVideoUrl: string;
 }
+
+export const PipComposition: React.FC<PipProps> = ({
+  screenVideoUrl,
+  cameraVideoUrl,
+}) => {
+  const { width, height } = useVideoConfig();
+  
+  // Camera overlay: bottom-right, 15% of frame width
+  const camWidth = width * 0.15;
+  const camHeight = camWidth * (9/16); // Assume 16:9 aspect ratio
+  const margin = 20;
+  
+  return (
+    <AbsoluteFill>
+      {/* Screen recording - full frame */}
+      <Video src={screenVideoUrl} />
+      
+      {/* Camera overlay - bottom right */}
+      <div style={{
+        position: 'absolute',
+        right: margin,
+        bottom: margin,
+        width: camWidth,
+        height: camHeight,
+        borderRadius: 8,
+        overflow: 'hidden',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+      }}>
+        <Video 
+          src={cameraVideoUrl}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </div>
+    </AbsoluteFill>
+  );
+};
 ```
 
-### Step 2.2: Create Lambda Orchestrator
+**Step A.3: Deploy to Lambda**
 
-Create a Lambda function that triggers compositing:
+```bash
+npx remotion lambda sites create src/index.ts --site-name=pip-compositor
+npx remotion lambda functions deploy
+```
+
+**Step A.4: Trigger from Orchestrator Lambda**
 
 ```javascript
-// Lambda function: compositeVideoTrigger
-const AWS = require('aws-sdk');
-const mediaConvert = new AWS.MediaConvert({ 
-    endpoint: 'https://YOUR_MEDIACONVERT_ENDPOINT.mediaconvert.us-east-1.amazonaws.com'
-});
-const s3 = new AWS.S3();
+// Lambda function: compositeVideoTrigger (Remotion version)
+const { renderMediaOnLambda, getRenderProgress } = require('@remotion/lambda');
 
 const BUCKET = 'com.knit.pipe-recorder-videos';
-const MEDIACONVERT_ROLE = 'arn:aws:iam::YOUR_ACCOUNT:role/MediaConvertRole';
+const REMOTION_FUNCTION_NAME = 'remotion-render-function';
+const REMOTION_SERVE_URL = 'https://your-remotion-site.s3.amazonaws.com/pip-compositor/index.html';
 
 exports.handler = async (event) => {
-    console.log('Event:', JSON.stringify(event));
-    
-    // Get the uploaded file info
     const record = event.Records[0];
     const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
     
-    // Extract streamName from camera file: {streamName}_camera.webm
     if (!key.endsWith('_camera.webm')) {
-        console.log('Not a camera file, skipping');
-        return;
+        return { message: 'Not a camera file' };
     }
     
     const streamName = key.replace('_camera.webm', '');
-    const screenKey = `${streamName}.mp4`;
-    const outputKey = `${streamName}_composited.mp4`;
+    const screenUrl = `https://${BUCKET}.s3.amazonaws.com/${streamName}.mp4`;
+    const cameraUrl = `https://${BUCKET}.s3.amazonaws.com/${key}`;
     
-    // Check if screen file exists
-    try {
-        await s3.headObject({ Bucket: BUCKET, Key: screenKey }).promise();
-    } catch (err) {
-        console.log('Screen file not found yet:', screenKey);
-        // Could implement retry logic or SNS notification
-        return;
+    const { renderId } = await renderMediaOnLambda({
+        region: 'us-east-1',
+        functionName: REMOTION_FUNCTION_NAME,
+        serveUrl: REMOTION_SERVE_URL,
+        composition: 'PipComposition',
+        inputProps: {
+            screenVideoUrl: screenUrl,
+            cameraVideoUrl: cameraUrl,
+        },
+        codec: 'h264',
+        outName: `${streamName}_composited.mp4`,
+        // Output to your S3 bucket
+        downloadBehavior: {
+            type: 's3-output',
+            bucketName: BUCKET,
+            key: `${streamName}_composited.mp4`,
+        },
+    });
+    
+    return { renderId, streamName };
+};
+```
+
+---
+
+### Option B: Shotstack API
+
+**Best for**: Simplicity, no infrastructure to manage.
+
+**Documentation**: [shotstack.io/docs](https://shotstack.io/docs/guide/)
+
+#### How It Works
+1. Send JSON describing your video composition
+2. Shotstack renders it on their infrastructure
+3. Download or push to your S3
+
+#### Estimated Cost
+- ~$10-20K/month at your volume (contact for enterprise pricing)
+
+#### Setup Steps
+
+**Step B.1: Get API Key**
+
+Sign up at [shotstack.io](https://shotstack.io) and get your API key.
+
+**Step B.2: Trigger from Orchestrator Lambda**
+
+```javascript
+// Lambda function: compositeVideoTrigger (Shotstack version)
+const fetch = require('node-fetch');
+
+const SHOTSTACK_API_KEY = process.env.SHOTSTACK_API_KEY;
+const SHOTSTACK_URL = 'https://api.shotstack.io/v1/render';
+const BUCKET = 'com.knit.pipe-recorder-videos';
+
+exports.handler = async (event) => {
+    const record = event.Records[0];
+    const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
+    
+    if (!key.endsWith('_camera.webm')) {
+        return { message: 'Not a camera file' };
     }
     
-    console.log('Both files present, starting MediaConvert job');
+    const streamName = key.replace('_camera.webm', '');
+    const screenUrl = `https://${BUCKET}.s3.amazonaws.com/${streamName}.mp4`;
+    const cameraUrl = `https://${BUCKET}.s3.amazonaws.com/${key}`;
     
-    // Create MediaConvert job
-    const jobSettings = {
-        Role: MEDIACONVERT_ROLE,
-        Settings: {
-            Inputs: [
+    // Shotstack API payload
+    const payload = {
+        timeline: {
+            tracks: [
+                // Camera overlay track (on top)
                 {
-                    // Screen recording (base layer)
-                    FileInput: `s3://${BUCKET}/${screenKey}`,
-                    AudioSelectors: {
-                        "Audio Selector 1": {
-                            DefaultSelection: "DEFAULT"
-                        }
-                    },
-                    VideoSelector: {}
-                },
-                {
-                    // Camera recording (overlay)
-                    FileInput: `s3://${BUCKET}/${key}`,
-                    VideoSelector: {}
-                    // No audio from camera
-                }
-            ],
-            OutputGroups: [
-                {
-                    Name: "File Group",
-                    OutputGroupSettings: {
-                        Type: "FILE_GROUP_SETTINGS",
-                        FileGroupSettings: {
-                            Destination: `s3://${BUCKET}/${streamName}_composited`
-                        }
-                    },
-                    Outputs: [
+                    clips: [
                         {
-                            ContainerSettings: {
-                                Container: "MP4",
-                                Mp4Settings: {}
+                            asset: {
+                                type: 'video',
+                                src: cameraUrl,
                             },
-                            VideoDescription: {
-                                CodecSettings: {
-                                    Codec: "H_264",
-                                    H264Settings: {
-                                        RateControlMode: "QVBR",
-                                        QvbrSettings: {
-                                            QvbrQualityLevel: 7
-                                        },
-                                        MaxBitrate: 5000000
-                                    }
-                                },
-                                // Picture-in-Picture overlay
-                                VideoPreprocessors: {
-                                    ImageInserter: {
-                                        InsertableImages: [
-                                            {
-                                                ImageInserterInput: `s3://${BUCKET}/${key}`,
-                                                // Position: bottom-right, 15% of frame
-                                                ImageX: 0,  // Will be calculated
-                                                ImageY: 0,  // Will be calculated
-                                                Layer: 1,
-                                                Opacity: 100,
-                                                Width: 15,  // 15% of output width
-                                                Height: 0   // Maintain aspect ratio
-                                            }
-                                        ]
-                                    }
-                                }
+                            start: 0,
+                            length: 'auto',
+                            position: 'bottomRight',
+                            offset: {
+                                x: -0.02,  // 2% from right
+                                y: 0.02,   // 2% from bottom
                             },
-                            AudioDescriptions: [
-                                {
-                                    CodecSettings: {
-                                        Codec: "AAC",
-                                        AacSettings: {
-                                            Bitrate: 128000,
-                                            CodingMode: "CODING_MODE_2_0",
-                                            SampleRate: 48000
-                                        }
-                                    },
-                                    AudioSourceName: "Audio Selector 1"
-                                }
-                            ]
+                            scale: 0.15,  // 15% of frame
                         }
                     ]
+                },
+                // Screen recording track (base layer)
+                {
+                    clips: [
+                        {
+                            asset: {
+                                type: 'video',
+                                src: screenUrl,
+                            },
+                            start: 0,
+                            length: 'auto',
+                        }
+                    ]
+                }
+            ]
+        },
+        output: {
+            format: 'mp4',
+            resolution: 'hd',
+            destinations: [
+                {
+                    provider: 's3',
+                    options: {
+                        bucket: BUCKET,
+                        region: 'us-east-1',
+                        key: `${streamName}_composited.mp4`,
+                    }
                 }
             ]
         }
     };
     
-    try {
-        const result = await mediaConvert.createJob(jobSettings).promise();
-        console.log('MediaConvert job created:', result.Job.Id);
-        return { jobId: result.Job.Id };
-    } catch (err) {
-        console.error('MediaConvert job failed:', err);
-        throw err;
-    }
+    const response = await fetch(SHOTSTACK_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': SHOTSTACK_API_KEY,
+        },
+        body: JSON.stringify(payload),
+    });
+    
+    const result = await response.json();
+    return { renderId: result.response.id, streamName };
 };
 ```
 
-**Note**: MediaConvert's ImageInserter is for static images. For video overlay (PiP), you need to use **Input Stitching** with **Overlay** settings. Here's the corrected approach:
+---
+
+### Option C: Creatomate API
+
+**Best for**: Similar to Shotstack, good template support.
+
+**Documentation**: [creatomate.com/developers](https://creatomate.com/developers)
+
+#### How It Works
+1. Create a template in their editor (or use JSON)
+2. Call API with your video URLs
+3. Output to your S3
+
+#### Estimated Cost
+- ~$9-18K/month at your volume (slightly cheaper than Shotstack)
+
+#### Setup Steps
+
+**Step C.1: Get API Key**
+
+Sign up at [creatomate.com](https://creatomate.com) and get your API key.
+
+**Step C.2: Trigger from Orchestrator Lambda**
 
 ```javascript
-// Corrected MediaConvert job for video overlay
-const jobSettings = {
-    Role: MEDIACONVERT_ROLE,
-    Settings: {
-        Inputs: [
-            {
-                FileInput: `s3://${BUCKET}/${screenKey}`,
-                AudioSelectors: {
-                    "Audio Selector 1": { DefaultSelection: "DEFAULT" }
-                },
-                VideoSelector: {},
-                VideoOverlays: [
-                    {
-                        Input: {
-                            FileInput: `s3://${BUCKET}/${key}`,
-                            VideoSelector: {}
-                        },
-                        Position: {
-                            // Bottom-right corner, 15% width
-                            Width: 15,
-                            Height: 0,  // Maintain aspect ratio
-                            XPosition: 83,  // 100 - 15 - 2 (margin)
-                            YPosition: 83   // Similar for Y
-                        }
-                    }
-                ]
-            }
-        ],
-        OutputGroups: [
-            {
-                Name: "File Group",
-                OutputGroupSettings: {
-                    Type: "FILE_GROUP_SETTINGS",
-                    FileGroupSettings: {
-                        Destination: `s3://${BUCKET}/`
-                    }
-                },
-                Outputs: [
-                    {
-                        NameModifier: `${streamName}_composited`,
-                        ContainerSettings: {
-                            Container: "MP4"
-                        },
-                        VideoDescription: {
-                            CodecSettings: {
-                                Codec: "H_264",
-                                H264Settings: {
-                                    RateControlMode: "QVBR",
-                                    QvbrSettings: { QvbrQualityLevel: 7 }
-                                }
-                            }
-                        },
-                        AudioDescriptions: [
-                            {
-                                CodecSettings: {
-                                    Codec: "AAC",
-                                    AacSettings: {
-                                        Bitrate: 128000,
-                                        SampleRate: 48000
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
+// Lambda function: compositeVideoTrigger (Creatomate version)
+const fetch = require('node-fetch');
+
+const CREATOMATE_API_KEY = process.env.CREATOMATE_API_KEY;
+const CREATOMATE_URL = 'https://api.creatomate.com/v1/renders';
+const BUCKET = 'com.knit.pipe-recorder-videos';
+
+exports.handler = async (event) => {
+    const record = event.Records[0];
+    const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
+    
+    if (!key.endsWith('_camera.webm')) {
+        return { message: 'Not a camera file' };
     }
+    
+    const streamName = key.replace('_camera.webm', '');
+    const screenUrl = `https://${BUCKET}.s3.amazonaws.com/${streamName}.mp4`;
+    const cameraUrl = `https://${BUCKET}.s3.amazonaws.com/${key}`;
+    
+    // Creatomate API payload
+    const payload = {
+        source: {
+            output_format: 'mp4',
+            width: 1920,
+            height: 1080,
+            elements: [
+                // Screen recording (base layer)
+                {
+                    type: 'video',
+                    source: screenUrl,
+                },
+                // Camera overlay
+                {
+                    type: 'video',
+                    source: cameraUrl,
+                    x: '85%',  // Position from left
+                    y: '85%',  // Position from top
+                    width: '15%',
+                    height: null,  // Maintain aspect ratio
+                    border_radius: 8,
+                }
+            ]
+        },
+        // Optional: output directly to S3
+        webhook_url: 'https://your-webhook.com/creatomate-complete',
+    };
+    
+    const response = await fetch(CREATOMATE_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${CREATOMATE_API_KEY}`,
+        },
+        body: JSON.stringify(payload),
+    });
+    
+    const result = await response.json();
+    
+    // Note: You'll need to download from Creatomate and upload to your S3
+    // Or use their webhook to get the final URL
+    return { renderId: result[0].id, streamName };
 };
 ```
 
-### Step 2.3: Configure S3 Event Notification
+---
 
-In AWS Console or via CLI:
+### Option D: Editframe
+
+**Best for**: HTML/CSS-based composition, familiar web tech.
+
+**Documentation**: [editframe.com/docs](https://editframe.com/docs/rendering/api)
+
+#### How It Works
+1. Create an HTML/CSS project that displays your videos
+2. Bundle it as a tarfile
+3. Upload to Editframe for rendering
+4. They parallelize rendering across workers
+
+#### Estimated Cost
+- Contact for pricing
+
+#### Setup Steps
+
+**Step D.1: Create Video Project**
+
+Create a directory with your composition:
+
+```html
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; background: #000; }
+        #screen { width: 100%; height: 100%; object-fit: contain; }
+        #camera {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 15%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <video id="screen" autoplay muted></video>
+    <video id="camera" autoplay muted></video>
+    
+    <script>
+        // RENDER_DATA is injected by Editframe
+        const { screenUrl, cameraUrl } = RENDER_DATA;
+        document.getElementById('screen').src = screenUrl;
+        document.getElementById('camera').src = cameraUrl;
+    </script>
+</body>
+</html>
+```
+
+**Step D.2: Trigger from Orchestrator Lambda**
+
+```javascript
+// Lambda function: compositeVideoTrigger (Editframe version)
+const api = require('@editframe/api');
+
+const EF_TOKEN = process.env.EDITFRAME_TOKEN;
+const client = new api.Client(EF_TOKEN);
+const BUCKET = 'com.knit.pipe-recorder-videos';
+
+exports.handler = async (event) => {
+    const record = event.Records[0];
+    const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
+    
+    if (!key.endsWith('_camera.webm')) {
+        return { message: 'Not a camera file' };
+    }
+    
+    const streamName = key.replace('_camera.webm', '');
+    const screenUrl = `https://${BUCKET}.s3.amazonaws.com/${streamName}.mp4`;
+    const cameraUrl = `https://${BUCKET}.s3.amazonaws.com/${key}`;
+    
+    // Bundle the render project
+    const tarStream = await bundleRender({
+        root: './pip-project',  // Your HTML/CSS project
+        renderData: {
+            screenUrl,
+            cameraUrl,
+        }
+    });
+    
+    // Create and upload render
+    const render = await api.createRender(client, { fps: 30 });
+    await api.uploadRender(client, render.id, tarStream);
+    
+    // Wait for completion (or use webhooks)
+    await api.getRenderProgress(client, render.id).whenComplete();
+    
+    // Download and upload to your S3
+    const response = await api.downloadRender(client, render.id);
+    // ... upload response.body to S3 as {streamName}_composited.mp4
+    
+    return { renderId: render.id, streamName };
+};
+```
+
+---
+
+### Option E: Self-Hosted FFmpeg
+
+**Best for**: Maximum cost savings, full control.
+
+#### How It Works
+1. Deploy FFmpeg on EC2, Fly.io, or Hetzner
+2. Process videos with FFmpeg CLI
+3. Upload output to S3
+
+#### Estimated Cost
+- ~$500-2,500/month (infrastructure only)
+
+#### Setup Steps
+
+See the "Alternative: Lambda + FFmpeg" section below for the FFmpeg approach.
+
+---
+
+## Common: S3 Event Trigger
+
+**All options** use the same S3 trigger to start processing:
+
+### Configure S3 Event Notification
 
 ```bash
 aws s3api put-bucket-notification-configuration \
@@ -726,7 +931,7 @@ aws s3api put-bucket-notification-configuration \
     }'
 ```
 
-Also add Lambda permission:
+Add Lambda permission:
 
 ```bash
 aws lambda add-permission \
@@ -758,11 +963,11 @@ After recording, check S3 bucket for:
 - `{streamName}.mp4` (screen from AddPipe)
 - `{streamName}_camera.webm` (camera from MediaRecorder)
 
-### Test 3: MediaConvert Job
+### Test 3: Server-Side Processing
 
-1. Check CloudWatch Logs for Lambda
-2. Check MediaConvert console for job status
-3. After job completes, verify `{streamName}_composited.mp4` exists in S3
+1. Check CloudWatch Logs for your orchestrator Lambda
+2. Check the processing service (Remotion/Shotstack/etc.) for job status
+3. After completion, verify `{streamName}_composited.mp4` exists in S3
 
 ### Test 4: End-to-End
 
@@ -778,8 +983,9 @@ After recording, check S3 bucket for:
 ### Checklist
 
 - [ ] Deploy presigned URL Lambda + API Gateway
-- [ ] Deploy compositing Lambda
-- [ ] Create MediaConvert IAM role
+- [ ] Choose server-side option (Remotion/Shotstack/Creatomate/Editframe)
+- [ ] Set up chosen service and get API keys
+- [ ] Deploy compositing orchestrator Lambda
 - [ ] Configure S3 event notification
 - [ ] Update client JavaScript files
 - [ ] Push changes to GitHub (jsDelivr CDN)
@@ -791,55 +997,94 @@ After recording, check S3 bucket for:
 
 Set up CloudWatch alarms for:
 - Lambda errors
-- MediaConvert job failures
+- Processing job failures
 - S3 upload failures (via CloudTrail)
-
-### Cost Estimates
-
-At 10,000 recordings/day × 10 minutes each:
-
-| Service | Usage | Cost/Month |
-|---------|-------|------------|
-| MediaConvert | 100,000 min × $0.015 | ~$45,000 |
-| Lambda | ~10,000 invocations/day | ~$3 |
-| S3 Storage | ~3TB (assuming 30MB/video) | ~$70 |
-| S3 Requests | ~60,000 PUT/day | ~$30 |
-| Data Transfer | Varies | Varies |
-
-**Note**: MediaConvert costs can be reduced by:
-- Using reserved pricing (40% discount)
-- Using spot pricing for non-urgent jobs
-- Optimizing output quality settings
 
 ---
 
-## Alternative: Lambda + FFmpeg (Lower Cost)
+## Alternative: Lambda + FFmpeg (Lowest Cost)
 
-For lower costs, you can use Lambda with FFmpeg layer instead of MediaConvert:
+For maximum cost savings, use Lambda with FFmpeg layer:
 
 ### Pros
-- ~10x cheaper than MediaConvert
-- More control over output
+- ~10x cheaper than managed services
+- Full control over output
 
 ### Cons
-- Lambda has 15-minute timeout
+- Lambda has 15-minute timeout (limits video length)
 - Limited to 10GB memory
 - Need to handle FFmpeg complexity
 
 ### Implementation
 
-Use the `ffmpeg-lambda-layer` and run:
+**Step 1: Create Lambda with FFmpeg Layer**
 
-```bash
-ffmpeg -i screen.mp4 -i camera.webm \
-    -filter_complex "[0:v][1:v]overlay=W-w-20:H-h-20:shortest=1[outv]" \
-    -map "[outv]" -map 0:a \
-    -c:v libx264 -crf 23 -preset fast \
-    -c:a aac -b:a 128k \
-    output.mp4
+Use a pre-built FFmpeg layer or build your own:
+- [ffmpeg-lambda-layer](https://github.com/serverlesspub/ffmpeg-aws-lambda-layer)
+
+**Step 2: Lambda Function**
+
+```javascript
+// Lambda function: compositeVideoFFmpeg
+const { execSync } = require('child_process');
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3();
+const fs = require('fs');
+
+const BUCKET = 'com.knit.pipe-recorder-videos';
+
+exports.handler = async (event) => {
+    const record = event.Records[0];
+    const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
+    
+    if (!key.endsWith('_camera.webm')) {
+        return { message: 'Not a camera file' };
+    }
+    
+    const streamName = key.replace('_camera.webm', '');
+    const screenKey = `${streamName}.mp4`;
+    const outputKey = `${streamName}_composited.mp4`;
+    
+    // Download files to /tmp
+    const screenPath = '/tmp/screen.mp4';
+    const cameraPath = '/tmp/camera.webm';
+    const outputPath = '/tmp/output.mp4';
+    
+    // Download screen
+    const screenData = await s3.getObject({ Bucket: BUCKET, Key: screenKey }).promise();
+    fs.writeFileSync(screenPath, screenData.Body);
+    
+    // Download camera
+    const cameraData = await s3.getObject({ Bucket: BUCKET, Key: key }).promise();
+    fs.writeFileSync(cameraPath, cameraData.Body);
+    
+    // Run FFmpeg - overlay camera in bottom-right corner
+    const ffmpegCmd = `ffmpeg -y -i ${screenPath} -i ${cameraPath} \
+        -filter_complex "[1:v]scale=iw*0.15:-1[cam];[0:v][cam]overlay=W-w-20:H-h-20:shortest=1[outv]" \
+        -map "[outv]" -map 0:a \
+        -c:v libx264 -crf 23 -preset fast \
+        -c:a aac -b:a 128k \
+        ${outputPath}`;
+    
+    execSync(ffmpegCmd);
+    
+    // Upload result
+    const outputData = fs.readFileSync(outputPath);
+    await s3.putObject({
+        Bucket: BUCKET,
+        Key: outputKey,
+        Body: outputData,
+        ContentType: 'video/mp4',
+    }).promise();
+    
+    // Clean up
+    fs.unlinkSync(screenPath);
+    fs.unlinkSync(cameraPath);
+    fs.unlinkSync(outputPath);
+    
+    return { success: true, outputKey };
+};
 ```
-
-This overlays the camera in the bottom-right corner with 20px margin.
 
 ---
 
@@ -865,24 +1110,25 @@ This overlays the camera in the bottom-right corner with 20px margin.
 
 **Solution**: Check CORS on S3 bucket, increase presigned URL expiry
 
-### MediaConvert Job Fails
+### Processing Job Fails
 
-**Symptoms**: Job status is "ERROR"
+**Symptoms**: Job status is "ERROR" or timeout
 **Causes**:
 - Input file not found
 - Codec not supported
 - IAM permissions
+- Video too long (for Lambda)
 
-**Solution**: Check CloudWatch Logs, verify input files exist
+**Solution**: Check logs for specific error, verify input files exist
 
 ### Composited Video Missing
 
 **Symptoms**: Final URL returns 404
 **Causes**:
-- MediaConvert job still processing
+- Processing still in progress
 - Job failed silently
 
-**Solution**: Add CloudWatch Events for MediaConvert job completion
+**Solution**: Add webhook/polling to confirm job completion
 
 ---
 
@@ -900,8 +1146,11 @@ pipe-screen-sharing/
 ├── lambda/
 │   ├── getPresignedUrl/      # NEW: Presigned URL generator
 │   │   └── index.js
-│   └── compositeVideo/       # NEW: MediaConvert orchestrator
+│   └── compositeVideo/       # NEW: Orchestrator (choose your option)
 │       └── index.js
+├── remotion/                  # If using Remotion
+│   └── src/
+│       └── PipComposition.tsx
 ├── README.md
 └── implementation_plan.md    # This file
 ```
@@ -910,10 +1159,23 @@ pipe-screen-sharing/
 
 ## Summary
 
-1. **Client changes**: Record camera separately with MediaRecorder, upload to S3
-2. **Server changes**: Lambda triggers MediaConvert when camera file arrives
+1. **Phase 1 (Client)**: Record camera separately with MediaRecorder, upload to S3
+2. **Phase 2 (Server)**: Choose your compositing service:
+   - **Remotion Lambda**: Best value (~$500-2K/mo)
+   - **Shotstack/Creatomate**: Simplest API (~$10-20K/mo)
+   - **Editframe**: HTML/CSS-based (contact for pricing)
+   - **FFmpeg on Lambda**: Cheapest (~$3-5K/mo)
 3. **URL strategy**: Set composited URL immediately; file appears after processing
 4. **Your system**: Add retry logic for fetching videos (5-10 min delay)
 
 This architecture eliminates client-side compositing, ensuring reliable video quality regardless of user's hardware.
 
+---
+
+## Next Steps
+
+1. **Decide on server-side option** based on budget and complexity tolerance
+2. **Implement Phase 1** (client-side changes - same for all options)
+3. **Set up chosen compositing service**
+4. **Test end-to-end**
+5. **Deploy to production**
